@@ -1,0 +1,376 @@
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js - kinect</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="public/style/styles.css">
+	</head>
+	<body>
+
+		<video 
+			id="video" 
+			loop  
+			crossOrigin="anonymous" 
+			playsinline 
+			style="display:none"
+			src="https://austin-web-stuff1.s3.amazonaws.com/falling-low.mov"
+			>
+		</video>
+
+        <script src="js/three.js"></script>
+
+		<script id="vs" type="x-shader/x-vertex">
+
+			uniform sampler2D map;
+
+			uniform float width;
+			uniform float height;
+			uniform float nearClipping, farClipping;
+
+			uniform float pointSize;
+			uniform float zOffset;
+
+			varying vec2 vUv;
+
+			const float XtoZ = 1.11146; // tan( 1.0144686 / 2.0 ) * 2.0;
+			const float YtoZ = 0.83359; // tan( 0.7898090 / 2.0 ) * 2.0;
+
+			void main() {
+
+				vUv = vec2( position.x / width, position.y / height );
+
+				vec4 color = texture2D( map, vUv );
+				float depth = ( color.r + color.g + color.b ) / 3.0;
+
+				// Projection code by @kcmic
+
+				float z = ( 1.0 - depth ) * (farClipping - nearClipping) + nearClipping;
+
+				vec4 pos = vec4(
+					( position.x / width - 0.5 ) * z * XtoZ,
+					( position.y / height - 0.5 ) * z * YtoZ,
+					- z + zOffset,
+					1.0);
+
+				gl_PointSize = pointSize;
+				gl_Position = projectionMatrix * modelViewMatrix * pos;
+
+			}
+
+		</script>
+
+		<script id="fs" type="x-shader/x-fragment">
+
+			uniform sampler2D map;
+
+			varying vec2 vUv;
+
+			void main() {
+
+				vec4 color = texture2D( map, vUv );
+				gl_FragColor = vec4( color.r, color.g, color.b, 0.2 );
+
+			}
+
+		</script>
+
+		<script type="module">
+
+            import { OrbitControls } from 'https://threejs.org/examples/jsm/controls/OrbitControls.js';
+            import { Sky } from 'https://threejs.org/examples/jsm/objects/Sky.js';
+			import { Water } from 'https://threejs.org/examples/jsm/objects/Water.js';
+			import { FontLoader } from 'https://threejs.org/examples/jsm/loaders/FontLoader.js';
+			import { TextGeometry } from 'https://threejs.org/examples/jsm/geometries/TextGeometry.js';
+			
+			let geometry, mesh, material;
+			let mouse, center;
+			let txtX = 800;
+			let txtSize = 150;
+
+			
+			const scene = buildScene();
+			const renderer = makeRenderer();
+			const camera = makeCamera()
+			const water = makeWater();
+			const video = makeVideo();
+			const controls = makeControls( camera, renderer );
+
+			if (window.screen.width < 800) {
+				txtSize = 100;
+				txtX = 550;
+			}
+
+			init();
+			animate();
+
+			function init() {
+
+				const fontLoader = new FontLoader();
+				fontLoader.load('/public/fonts/Western_Normal.json', (font) => {
+
+					const dirLight = new THREE.DirectionalLight( 0xffffff, 0.125 );
+					dirLight.position.set( 0, 150, -400 ).normalize();
+					scene.add( dirLight );
+
+					const headText = 'MICHAEL MILLER';
+					const bodyText = 'VIDEO FOR "FALLING"\n\nMORE MUSIC OTW\n\nPRESS (& ROTATE) TO BEGIN';
+
+					
+					const bigTextGeo = new TextGeometry( headText, {
+						font: font,
+						size: txtSize,
+						height: 60,
+						curveSegments: 12,
+						bevelThickness: 2,
+						bevelSize: 5,
+						bevelEnabled: true
+
+					} );
+
+					const bodyTextGeo = new TextGeometry( bodyText, {
+						font: font,
+						size: 75,
+						height: 40,
+						curveSegments: 2,
+						bevelThickness: 2,
+						bevelSize: 2,
+						bevelEnabled: false
+
+					} );
+
+					bigTextGeo.computeBoundingBox();
+					bodyTextGeo.computeBoundingBox();
+
+					const bigTextMaterial = new THREE.MeshPhongMaterial({ 
+						color: 0xff0000, 
+						specular: 0xffffff
+					} );
+
+					const bigText = new THREE.Mesh( bigTextGeo, bigTextMaterial );
+					const littleText = new THREE.Mesh( bodyTextGeo, bigTextMaterial );
+
+					bigText.rotation.y =+ 3.15;
+					bigText.position.set(txtX, 800, 2700);
+					littleText.rotation.y =+ 3.15;
+					littleText.position.set(600, 600, 3000);
+
+					scene.add( bigText );
+					scene.add( littleText );
+
+				});
+
+
+
+
+				
+				center = new THREE.Vector3();
+				center.z = - 1000;
+
+
+
+				const sky = new Sky();
+				sky.scale.setScalar(45000);
+				scene.add(sky);
+		
+				const uniforms = sky.material.uniforms;
+
+				const elevation = 0;
+				const azimuth = 130;
+				uniforms['turbidity'].value = 14;
+				uniforms[ 'rayleigh' ].value = 1.493;
+				uniforms[ 'mieCoefficient' ].value = 0.007;
+				uniforms[ 'mieDirectionalG' ].value = 0.594;
+
+        
+				const sun = new THREE.Vector3();
+
+				const phi = THREE.MathUtils.degToRad(90 - elevation);
+				const theta = THREE.MathUtils.degToRad(azimuth);
+
+				sun.setFromSphericalCoords(1, phi, theta);
+	
+
+				uniforms['sunPosition'].value.copy(sun);
+
+
+
+				mouse = new THREE.Vector3( 0, 0, 1 );
+
+
+				document.addEventListener('mouseup', () => {
+					document.getElementById('video').play();
+				});
+
+				window.addEventListener('touchend', () => {
+					document.getElementById('video').play();
+				})
+
+				window.addEventListener('keydown', () => document.getElementById('video').pause())
+
+				window.addEventListener( 'resize', onWindowResize );
+
+			}
+
+			function  buildScene() {
+				const scene = new THREE.Scene();
+				return scene;
+			}
+
+			function makeRenderer() {
+				// get dom area for scene
+				const container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				const renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+				return renderer;
+			}
+
+
+			function makeCamera() {
+
+				// position camera
+				const camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 1, 10000 );
+				camera.position.set( 0, 200, 0 );
+
+				return camera;
+			}
+
+			function makeWater() {
+				const waterGeometry = new THREE.PlaneGeometry(70000, 70000);
+				const water = new Water(
+				waterGeometry,
+				{
+					textureWidth: 512,
+					textureHeight: 512,
+					waterNormals: new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg', function ( texture ) {
+					texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+					}),
+					alpha: 1.0,
+					sunDirection: new THREE.Vector3(),
+					sunColor: 0xffffff,
+					waterColor: 0x001e0f,
+					distortionScale: 3.7,
+					fog: scene.fog !== undefined
+				}
+				);
+				water.rotation.x =- Math.PI / 2;
+
+				scene.add(water);
+				
+				const waterUniforms = water.material.uniforms;
+
+				return water;
+
+			}
+
+			function makeVideo() {
+				// create video mesh 
+
+				// setting video brightness if mobile/desktop
+				let vidExposure;
+				if (window.screen.width < 800) {
+					vidExposure = 5;
+				} else {
+					vidExposure = 2;
+				}
+				const video = document.getElementById( 'video' );
+
+				const texture = new THREE.VideoTexture( video );
+				texture.minFilter = THREE.NearestFilter;
+
+				const width = 640
+				const height = 480;
+				const nearClipping = 3000
+				const farClipping = 3000;
+
+				geometry = new THREE.BufferGeometry();
+
+				const vertices = new Float32Array( width * height * 3 );
+
+				for ( let i = 0, j = 0, l = vertices.length; i < l; i += 3, j ++ ) {
+
+					vertices[ i ] = j % width;
+					vertices[ i + 1 ] = Math.floor( j / width );
+
+				}
+
+				geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+				material = new THREE.ShaderMaterial( {
+
+					uniforms: {
+
+						"map": { value: texture },
+						"width": { value: width },
+						"height": { value: height },
+						"nearClipping": { value: nearClipping },
+						"farClipping": { value: farClipping },
+
+						"pointSize": { value: vidExposure },
+						"zOffset": { value: 2000 }
+
+					},
+					vertexShader: document.getElementById( 'vs' ).textContent,
+					fragmentShader: document.getElementById( 'fs' ).textContent,
+					blending: THREE.AdditiveBlending,
+					depthTest: false, depthWrite: false,
+					transparent: true
+
+				} );
+
+				mesh = new THREE.Points( geometry, material );
+				mesh.position.set(0, 1000, -200);
+				mesh.rotation.x =+ 0.35;
+				scene.add( mesh );
+
+				return mesh;
+			}
+
+			function makeControls( camera, renderer ) {
+				const controls = new OrbitControls(camera, renderer.domElement);
+                controls.maxPolarAngle = Math.PI * 0.8;
+                controls.target.set(0, 430, 1000);
+                controls.minDistance = 200.0;
+                controls.maxDistance = 1000.0;
+                controls.update();
+
+				return controls;
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function animate() {
+
+				// Animates water
+				water.material.uniforms[ 'time' ].value += 1.0 / 60.0;
+
+				const time = performance.now() * 0.001;
+
+				requestAnimationFrame( animate );
+
+				render();
+
+			}
+
+			function render() {
+
+				renderer.toneMappingExposure = 0.19;
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+	</body>
+</html>
