@@ -2,13 +2,12 @@
 <!DOCTYPE html>
 <html lang="en">
 	<head>
-		<title>three.js - kinect</title>
+		<title>michael miller music</title>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 		<link type="text/css" rel="stylesheet" href="public/style/styles.css">
 	</head>
 	<body>
-
 		<video 
 			id="video" 
 			loop  
@@ -107,10 +106,15 @@
 
 			function init() {
 
+				const info = document.createElement( 'div' );
+				info.id = 'info';
+				info.innerHTML = '<a href="https://sitebyaustin.dev" target="_blank" rel="noopener">by austin wills</a>';
+				document.body.appendChild( info );
+
 				const fontLoader = new FontLoader();
 				fontLoader.load('/public/fonts/Western_Normal.json', (font) => {
 
-					const dirLight = new THREE.DirectionalLight( 0xffffff, 0.125 );
+					const dirLight = new THREE.DirectionalLight(0xffffff, 0.125);
 					dirLight.position.set( 0, 150, -400 ).normalize();
 					scene.add( dirLight );
 
